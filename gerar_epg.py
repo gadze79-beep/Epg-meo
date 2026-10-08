@@ -1,88 +1,32 @@
 
-import datetime
-import xml.etree.ElementTree as ET
+import sys
 import requests
 
-API_URL = "https://www.meo.pt/_layouts/15/OTB.SP.MEO.EPG/Services/EPG.ashx/getPrograms"
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "Content-Type": "application/json; charset=UTF-8",
-    "X-Requested-With": "XMLHttpRequest",
-}
+def atualizar_epg():
+  # Fonte XMLTV pública e atualizada com a grelha de Portugal (MEO, NOS, Vodafone)
+  url_epg = "https://raw.githubusercontent.com/iptv-org/epg/master/providers/meo.pt/guide.xml"
 
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      )
+  }
 
-def gerar_xml_epg():
-  tv = ET.Element("tv")
-  hoje = datetime.datetime.now().strftime("%Y-%m-%d")
-
-  payload = {"date": hoje, "channel": ""}
-
+  print("A descarregar o guia de programação atualizado...")
   try:
-    response = requests.post(
-        API_URL, json=payload, headers=HEADERS, timeout=30
-    )
-
-    if response.status_code == 200:
-      dados = response.json()
-      canais = dados.get("channels", [])
-
-      print(f"Foram encontrados {len(canais)} canais no MEO.")
-
-      for ch in canais:
-        canal_sigla = ch.get("sigla") or ch.get("callSign") or "CANAL"
-        canal_nome = ch.get("name") or canal_sigla
-
-        # Criar elemento do canal
-        channel_elem = ET.SubElement(tv, "channel", id=f"{canal_sigla}.pt")
-        display_name = ET.SubElement(channel_elem, "display-name")
-        display_name.text = canal_nome
-
-        # Criar elementos dos programas
-        programas = ch.get("programs", [])
-        for prog in programas:
-          titulo = prog.get("name", "Sem Título")
-          inicio_raw = prog.get("dateInterval", {}).get("start")
-          fim_raw = prog.get("dateInterval", {}).get("end")
-
-          if inicio_raw and fim_raw:
-            start_str = (
-                inicio_raw.replace("-", "").replace(":", "").replace("T", "")
-                + " +0100"
-            )
-            stop_str = (
-                fim_raw.replace("-", "").replace(":", "").replace("T", "")
-                + " +0100"
-            )
-          else:
-            continue
-
-          programme = ET.SubElement(
-              tv,
-              "programme",
-              start=start_str,
-              stop=stop_str,
-              channel=f"{canal_sigla}.pt",
-          )
-          title_elem = ET.SubElement(programme, "title", lang="pt")
-          title_elem.text = titulo
-
-          desc = prog.get("description")
-          if desc:
-            desc_elem = ET.SubElement(programme, "desc", lang="pt")
-            desc_elem.text = desc
-
+    response = requests.get(url_epg, headers=headers, timeout=60)
+    if response.status_code == 200 and len(response.content) > 500:
+      with open("epg_meo.xml", "wb") as f:
+        f.write(response.content)
+      print("EPG descarregado e guardado em epg_meo.xml com sucesso!")
+    else:
+      print(f"Erro no download: Status {response.status_code}")
+      sys.exit(1)
   except Exception as e:
-    print(f"Erro ao ligar à API MEO: {e}")
-
-  tree = ET.ElementTree(tv)
-  tree.write("epg_meo.xml", encoding="utf-8", xml_declaration=True)
-  print("Processo concluído com sucesso!")
+    print(f"Exceção ao descarregar EPG: {e}")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
-  gerar_xml_epg()
+  atualizar_epg()
