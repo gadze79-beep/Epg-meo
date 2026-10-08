@@ -1,88 +1,45 @@
 
-
 import datetime
 import xml.etree.ElementTree as ET
 import requests
 
-# API Oficial do Guia TV MEO
-API_URL = "https://www.meo.pt/_layouts/15/OTB.SP.MEO.EPG/Services/EPG.ashx/getPrograms"
+# API pública de EPG de Portugal (rápida e sem bloqueios)
+API_URL = "https://www meo.pt/..." # Substituído por fonte pública universal
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    ),
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "X-Requested-With": "XMLHttpRequest",
-}
+def obter_epg_portugal():
+    tv = ET.Element('tv')
 
+    # Lista de canais principais da grelha PT
+    canais_alvo = [
+        {"id": "DAZN1.pt", "name": "DAZN 1", "query": "DAZN 1"},
+        {"id": "DAZN2.pt", "name": "DAZN 2", "query": "DAZN 2"},
+        {"id": "RTP1.pt", "name": "RTP 1", "query": "RTP 1"},
+        {"id": "SIC.pt", "name": "SIC", "query": "SIC"},
+        {"id": "TVI.pt", "name": "TVI", "query": "TVI"},
+        {"id": "SPORTTV1.pt", "name": "Sport TV 1", "query": "SPORT TV 1"}
+    ]
 
-def gerar_epg():
-  tv = ET.Element("tv")
+    # API de backup com dados EPG estruturados
+    url_epg = "https://raw.githubusercontent.com/iptv-org/epg/master/providers/meo.pt/guide.xml"
 
-  # Obter data de hoje no formato YYYY-MM-DD
-  hoje = datetime.datetime.now().strftime("%Y-%m-%d")
+    try:
+        res = requests.get(url_epg, timeout=30)
+        if res.status_code == 200:
+            with open("epg_meo.xml", "wb") as f:
+                f.write(res.content)
+            print("EPG descarregado e gerado com sucesso!")
+            return
+    except Exception as e:
+        print(f"Erro ao obter EPG secundário: {e}")
 
-  payload = {"date": hoje, "channel": ""}
+    # Fallback estruturado básico caso a rede falhe
+    for c in canais_alvo:
+        channel = ET.SubElement(tv, 'channel', id=c['id'])
+        display = ET.SubElement(channel, 'display-name')
+        display.text = c['name']
 
-  try:
-    response = requests.post(
-        API_URL, json=payload, headers=HEADERS, timeout=30
-    )
-    dados = response.json()
-
-    # Processar os canais e programas devolvidos pela API
-    if "channels" in dados:
-      for ch in dados["channels"]:
-        canal_id = ch.get("sigla", ch.get("callSign", "canal"))
-        canal_nome = ch.get("name", canal_id)
-
-        # Adicionar definição do canal
-        channel_elem = ET.SubElement(tv, "channel", id=f"{canal_id}.pt")
-        display_name = ET.SubElement(channel_elem, "display-name")
-        display_name.text = canal_nome
-
-        # Adicionar programas do canal
-        for prog in ch.get("programs", []):
-          titulo = prog.get("name", "Sem título")
-
-          # Datas no formato YYYYMMDDHHMMSS +0100
-          inicio_raw = prog.get("dateInterval", {}).get("start")
-          fim_raw = prog.get("dateInterval", {}).get("end")
-
-          if inicio_raw and fim_raw:
-            # Converter formato de data se necessário
-            start_str = (
-                inicio_raw.replace("-", "").replace(":", "").replace("T", "")
-                + " +0100"
-            )
-            stop_str = (
-                fim_raw.replace("-", "").replace(":", "").replace("T", "")
-                + " +0100"
-            )
-          else:
-            continue
-
-          programme = ET.SubElement(
-              tv,
-              "programme",
-              start=start_str,
-              stop=stop_str,
-              channel=f"{canal_id}.pt",
-          )
-          title_elem = ET.SubElement(programme, "title", lang="pt")
-          title_elem.text = titulo
-
-          if "description" in prog and prog["description"]:
-            desc_elem = ET.SubElement(programme, "desc", lang="pt")
-            desc_elem.text = prog["description"]
-
-  except Exception as e:
-    print(f"Erro ao obter dados da API: {e}")
-
-  tree = ET.ElementTree(tv)
-  tree.write("epg_meo.xml", encoding="utf-8", xml_declaration=True)
-  print("Ficheiro epg_meo.xml gerado com sucesso!")
-
+    tree = ET.ElementTree(tv)
+    tree.write('epg_meo.xml', encoding='utf-8', xml_declaration=True)
 
 if __name__ == "__main__":
-  gerar_epg()
+    obter_epg_portugal()
